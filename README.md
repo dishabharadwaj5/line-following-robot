@@ -1,132 +1,272 @@
+# 🤖 Line Tracking Robot with Obstacle Detection and Avoidance using ROS 2
 
+## 📋 Project Overview
 
-# 📷 Line Following Module (Member 1)
+Mobile robots operating in structured environments must follow predefined paths while safely handling unexpected obstacles. Basic line-following systems fail when obstacles appear, leading to collisions or interruptions. This project develops a ROS 2-based simulated robot that can accurately track a line and dynamically detect and avoid obstacles, ensuring smooth and safe autonomous navigation in a virtual environment.
 
-## 📌 Overview
-
-This module detects a line using camera input and publishes an error signal for robot control in ROS 2 (Humble).
-
----
-
-## 🧠 Working
-
-* Subscribe to `/camera/image_raw`
-* Process image using OpenCV
-* Detect line (threshold + contour)
-* Compute error:
-
-  ```
-  error = center_x - line_x
-  ```
-* Publish to `/line_error`
+**Implementation Type:** Simulation (Gazebo)
 
 ---
 
-## 📡 Topics
+## 🎯 Objectives
 
-| Topic               | Type           |
-| ------------------- | -------------- |
-| `/camera/image_raw` | Image input    |
-| `/line_error`       | Float32 output |
+- Design a simulated mobile robot capable of following a predefined path (line) autonomously.
+- Detect static and dynamic obstacles using virtual sensors.
+- Implement real-time obstacle avoidance without losing the line-following behavior.
+- Integrate perception, decision-making, and motion control using ROS nodes.
+- Validate the robot's navigation behavior in a Gazebo simulation environment.
 
 ---
 
-## ⚙️ Setup
+## ✅ Outcomes
 
-```bash
-sudo apt update
-sudo apt install python3-opencv ros-humble-cv-bridge
+- Successful simulation of a line-following robot in a virtual environment.
+- Accurate detection of obstacles placed along the robot's path.
+- Smooth avoidance of obstacles and re-alignment with the guiding line.
+- Demonstration of ROS-based modular architecture using publishers and subscribers.
+- Improved understanding of autonomous navigation concepts in mobile robotics.
+
+---
+
+## 🛠️ Tools & Platforms
+
+| Tool | Purpose |
+|---|---|
+| ROS 2 Jazzy | Robot Operating System framework |
+| Gazebo Simulator | Environment and robot simulation |
+| RViz | Visualization of sensor data |
+| OpenCV | Line detection using camera images |
+| Python 3 | Implementing ROS nodes |
+| Ubuntu 24.04 LTS | Operating system |
+
+---
+
+## 🏗️ System Architecture
+
+```
+/camera/image_raw → [line_follower] → /line_error ──────────┐
+                                                              ▼
+                                                      [control_node] → /cmd_vel → Robot
+                                                              ▲
+/scan → [obstacle_detector] → /obstacle_detected ────────────┘
 ```
 
 ---
 
-## 🚀 Run
+## 📦 Modules
 
-### 1. Launch simulation
+---
 
+## 📷 Line Following Module (Member 1)
+
+### 📌 Overview
+This module detects a line using camera input and publishes an error signal for robot control in ROS 2.
+
+### 🧠 Working
+- Subscribe to `/camera/image_raw`
+- Process image using OpenCV
+- Detect line (threshold + contour)
+- Compute error:
+```
+error = center_x - line_x
+```
+- Publish to `/line_error`
+
+### 📡 Topics
+
+| Topic | Type | Direction |
+|---|---|---|
+| `/camera/image_raw` | sensor_msgs/Image | Input |
+| `/line_error` | std_msgs/Float32 | Output |
+
+### ⚙️ Setup
 ```bash
-source /opt/ros/humble/setup.bash
+sudo apt update
+sudo apt install python3-opencv ros-jazzy-cv-bridge
+```
+
+### 🚀 Run
+
+1. Launch simulation:
+```bash
+source /opt/ros/jazzy/setup.bash
 export TURTLEBOT3_MODEL=waffle_pi
 ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
 ```
 
-### 2. Run node
-
+2. Run node:
 ```bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 python3 line_follower.py
 ```
 
-### 3. (Optional) Teleop
-
+3. (Optional) Teleop:
 ```bash
 export TURTLEBOT3_MODEL=waffle_pi
 ros2 run turtlebot3_teleop teleop_keyboard
 ```
 
----
+### 🎯 Output
+- OpenCV window shows line detection
+- Terminal prints changing error values
 
-## 🎯 Output
-
-* OpenCV window shows line detection
-* Terminal prints changing error values
-
----
-
-## ⚠️ Note
-
-* Ensure a black line exists in Gazebo
-* Tune threshold if needed
-
-
-# 🛑 Obstacle Detection Module (Member 2)
-
-## 📌 Overview
-This module gives the robot a "sense of touch." It uses the TurtleBot3's 360-degree LiDAR sensor to detect obstacles in the robot's forward path and triggers an emergency stop flag if anything gets too close.
+### ⚠️ Note
+- Ensure a black line exists in Gazebo
+- Tune threshold if needed
 
 ---
 
-## 🧠 Working
-* Subscribes to the LiDAR `/scan` topic.
-* Slices the data array to isolate a 60-degree cone directly in front of the robot.
-* Checks if any object within that cone is closer than the `safe_distance` (0.5 meters).
-* Publishes a `True` or `False` boolean flag to the rest of the system.
+## 🛑 Obstacle Detection Module (Member 2)
 
----
+### 📌 Overview
+This module uses the TurtleBot3's 360-degree LiDAR sensor to detect obstacles in the robot's forward path and triggers an emergency stop flag if anything gets too close.
 
-## 📡 Topics
-| Topic                | Type                 | Direction |
-| -------------------- | -------------------- | --------- |
-| `/scan`              | sensor_msgs/LaserScan| Input     |
-| `/obstacle_detected` | std_msgs/Bool        | Output    |
+### 🧠 Working
+- Subscribes to the LiDAR `/scan` topic.
+- Slices the data array to isolate a 60-degree cone directly in front of the robot (angles 0–30° and 330–360°).
+- Checks if any object within that cone is closer than `safe_distance` (0.15 meters).
+- Saves the obstacle distance safely before publishing.
+- Publishes a `True` or `False` boolean flag to the rest of the system.
 
----
+### 📡 Topics
 
-## 🚀 Run
+| Topic | Type | Direction |
+|---|---|---|
+| `/scan` | sensor_msgs/LaserScan | Input |
+| `/obstacle_detected` | std_msgs/Bool | Output |
 
-### 1. Launch simulation
+### 🚀 Run
+
+1. Launch simulation:
 ```bash
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 export TURTLEBOT3_MODEL=waffle_pi
 ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
+```
 
-
-2. Run node
-Bash
-
-source /opt/ros/humble/setup.bash
-python3 obstacle_detector.py
-
-🎯 Output
-
-    Terminal prints Path clear. when safe.
-
-    Terminal prints a yellow OBSTACLE DETECTED within 0.5m! warning when an object blocks the front path.
-
-
-### **Step 2: Push to GitHub**
-Now that your `obstacle_detector.py` is saved in the folder and your `README.md` is updated, go to your terminal. 
-
-Make sure you are inside your project folder:
+2. Run node:
 ```bash
+source /opt/ros/jazzy/setup.bash
+python3 obstacle_detector.py
+```
+
+### 🎯 Output
+- Terminal prints `✅ Path clear` when safe.
+- Terminal prints `🚨 OBSTACLE at X.XX m` warning when an object blocks the front path.
+
+---
+
+## 🧠 Control & Decision Node (Member 3)
+
+### 📌 Overview
+This is the brain of the robot. It subscribes to both the line error and obstacle detection topics, makes a real-time decision, and publishes velocity commands to drive the robot safely.
+
+### 🧠 Working
+- Subscribes to `/line_error` (from Member 1's camera node).
+- Subscribes to `/obstacle_detected` (from Member 2's LiDAR node).
+- **Decision logic:**
+  - If obstacle detected → **STOP** (linear and angular velocity = 0)
+  - If path clear → **Follow line** using a P-controller:
+    ```
+    angular_z = -k * error     (k = 0.005)
+    linear_x  = 0.2 m/s
+    ```
+- Publishes `TwistStamped` to `/cmd_vel` at 10 Hz.
+- Sets header stamp and frame_id for ROS 2 Jazzy compatibility.
+
+### 📡 Topics
+
+| Topic | Type | Direction |
+|---|---|---|
+| `/line_error` | std_msgs/Float32 | Input |
+| `/obstacle_detected` | std_msgs/Bool | Input |
+| `/cmd_vel` | geometry_msgs/TwistStamped | Output |
+
+### ⚙️ Setup
+```bash
+sudo apt update
+sudo apt install python3-rclpy ros-jazzy-geometry-msgs
+```
+
+### 🚀 Run
+
+1. Launch simulation:
+```bash
+source /opt/ros/jazzy/setup.bash
+export TURTLEBOT3_MODEL=waffle_pi
+ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
+```
+
+2. Run node:
+```bash
+source /opt/ros/jazzy/setup.bash
+python3 control_node.py
+```
+
+3. Verify output:
+```bash
+ros2 topic echo /cmd_vel
+```
+
+### 🎯 Output
+- `Following line | error: X.X` — robot actively steering to follow line
+- `🚨 OBSTACLE → STOP` — robot halted due to detected obstacle
+- `/cmd_vel` shows `linear.x: 0.2` and `angular.z: -k*error` when following
+- `/cmd_vel` shows `linear.x: 0.0, angular.z: 0.0` when stopped
+
+### 🧪 Test Without Simulation (Standalone)
+```bash
+# Simulate line error
+ros2 topic pub /line_error std_msgs/msg/Float32 "data: 50.0"
+
+# Simulate obstacle
+ros2 topic pub /obstacle_detected std_msgs/msg/Bool "data: true"
+
+# Simulate clear path
+ros2 topic pub /obstacle_detected std_msgs/msg/Bool "data: false"
+```
+
+---
+
+## 🚀 Running the Full System
+
+Open **4 terminals** and run in order:
+
+**Terminal 1 — Gazebo Simulation:**
+```bash
+source /opt/ros/jazzy/setup.bash
+export TURTLEBOT3_MODEL=waffle_pi
+ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
+```
+
+**Terminal 2 — Obstacle Detector:**
+```bash
+source /opt/ros/jazzy/setup.bash
 cd ~/line-following-robot
+python3 obstacle_detector.py
+```
+
+**Terminal 3 — Line Follower:**
+```bash
+source /opt/ros/jazzy/setup.bash
+cd ~/line-following-robot
+python3 line_follower.py
+```
+
+**Terminal 4 — Control Node:**
+```bash
+source /opt/ros/jazzy/setup.bash
+cd ~/line-following-robot
+python3 control_node.py
+```
+
+---
+
+## 👥 Team Members
+
+| Member | Module |
+|---|---|
+| Member 1 | Line Following (Computer Vision) |
+| Member 2 | LiDAR Obstacle Detection |
+| Member 3 | Control & Decision Node |
+| Member 4 | Simulation + Integration + Testing |
