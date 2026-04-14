@@ -32,12 +32,12 @@ Mobile robots operating in structured environments must follow predefined paths 
 
 | Tool | Purpose |
 |---|---|
-| ROS 2 Jazzy | Robot Operating System framework |
+| ROS 2 Humble | Robot Operating System framework |
 | Gazebo Simulator | Environment and robot simulation |
 | RViz | Visualization of sensor data |
 | OpenCV | Line detection using camera images |
 | Python 3 | Implementing ROS nodes |
-| Ubuntu 24.04 LTS | Operating system |
+| Ubuntu 22.04 LTS | Operating system |
 
 ---
 
@@ -228,37 +228,135 @@ ros2 topic pub /obstacle_detected std_msgs/msg/Bool "data: false"
 
 ---
 
-## 🚀 Running the Full System
+## 🖥️ Simulation + Integration + Testing (Member 4)
 
-Open **4 terminals** and run in order:
+### 📌 Overview
+This module handles the full system integration by launching all ROS 2 nodes together in the Gazebo simulation environment and validating the complete robot behavior through structured testing. The goal is to confirm that line following, obstacle detection, and motion control all work correctly as one unified system.
+
+---
+
+### ⚙️ Setup
+```bash
+sudo apt update
+sudo apt install ros-humble-turtlebot3-gazebo ros-humble-turtlebot3-description
+echo "export TURTLEBOT3_MODEL=waffle_pi" >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+### 🚀 Full System Launch
+
+Open **4 terminals** and run in this exact order:
 
 **Terminal 1 — Gazebo Simulation:**
 ```bash
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 export TURTLEBOT3_MODEL=waffle_pi
 ros2 launch turtlebot3_gazebo turtlebot3_world.launch.py
 ```
+> Wait for Gazebo to fully open before running the next terminals.
 
 **Terminal 2 — Obstacle Detector:**
 ```bash
-source /opt/ros/jazzy/setup.bash
-cd ~/line-following-robot
-python3 obstacle_detector.py
+source /opt/ros/humble/setup.bash
+python3 ~/line-following-robot/obstacle_detector.py
 ```
 
 **Terminal 3 — Line Follower:**
 ```bash
-source /opt/ros/jazzy/setup.bash
-cd ~/line-following-robot
-python3 line_follower.py
+source /opt/ros/humble/setup.bash
+python3 ~/line-following-robot/line_follower.py
 ```
 
 **Terminal 4 — Control Node:**
 ```bash
-source /opt/ros/jazzy/setup.bash
-cd ~/line-following-robot
-python3 control_node.py
+source /opt/ros/humble/setup.bash
+python3 ~/line-following-robot/control_node.py
 ```
+
+---
+
+### 🧪 Integration Tests (Standalone — No Gazebo Needed)
+
+These tests verify each part of the system individually before full integration.
+
+#### Test A — Verify /cmd_vel is publishing
+```bash
+ros2 topic echo /cmd_vel
+```
+✅ Expected: `linear.x: 0.2`, `angular.z: ~1.5` (robot steering)
+
+#### Test B — Verify obstacle stop works
+```bash
+ros2 topic pub --rate 10 /obstacle_detected std_msgs/msg/Bool "data: true"
+```
+✅ Expected: `linear.x: 0.0`, `angular.z: 0.0` (robot stopped)
+
+#### Test C — Verify line error correction works
+```bash
+ros2 topic pub --rate 10 /line_error std_msgs/msg/Float32 "data: 100.0"
+```
+✅ Expected: `angular.z ≈ -0.5` (= -0.005 × 100, P-controller working)
+
+---
+
+### ✅ Test Results
+
+| Test | Description | Result |
+|---|---|---|
+| Test A | /cmd_vel publishing confirmed | ✅ PASS |
+| Test B | Robot stops when obstacle detected | ✅ PASS |
+| Test C | Angular correction matches line error | ✅ PASS |
+| Full Integration | Robot moves, follows line and stops at obstacle in Gazebo | ✅ PASS |
+
+---
+
+### 🔍 System Verification
+
+After launching all 4 terminals, run:
+
+```bash
+source /opt/ros/humble/setup.bash
+ros2 node list && ros2 topic list
+```
+
+**Expected nodes:**
+/control_node
+/line_follower
+/obstacle_detector
+/gazebo
+/robot_state_publisher
+/turtlebot3_diff_drive
+
+**Expected topics:**
+/cmd_vel
+/line_error
+/obstacle_detected
+/scan
+/camera/image_raw
+
+---
+
+### 🎯 Observed Behavior in Gazebo
+
+- ✅ Robot moves forward at `linear.x: 0.2 m/s` along the track
+- ✅ Line follower computes error values (e.g. `-59`) and steers robot accordingly
+- ✅ LiDAR scans 60° front cone continuously for obstacles
+- ✅ Robot successfully stops when green obstacle box is within `0.15m`
+- ✅ OpenCV **ROI** and **Threshold** windows confirm live camera-based line detection
+
+---
+
+### 🛠️ Environment
+
+| Component | Version |
+|---|---|
+| ROS 2 | Humble |
+| OS | Ubuntu 22.04 LTS |
+| Gazebo | Classic 11 |
+| TurtleBot3 Model | waffle_pi |
+| Python | 3.10 |
 
 ---
 
