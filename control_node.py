@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 
 from std_msgs.msg import Float32, Bool
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import Twist
 
 
 class ControlNode(Node):
@@ -17,7 +17,7 @@ class ControlNode(Node):
         self.create_subscription(Bool, '/obstacle_detected', self.obstacle_callback, 10)
 
         # Publisher (TwistStamped ONLY)
-        self.cmd_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         self.error = 0.0
         self.obstacle = False
@@ -31,18 +31,16 @@ class ControlNode(Node):
         self.obstacle = msg.data
 
     def control_loop(self):
-        cmd = TwistStamped()
-        cmd.header.stamp = self.get_clock().now().to_msg()
-        cmd.header.frame_id = 'base_link'
+        cmd = Twist()
 
         if self.obstacle:
-            cmd.twist.linear.x = 0.0
-            cmd.twist.angular.z = 0.0
+            cmd.linear.x = 0.0
+            cmd.angular.z = 0.0
             self.get_logger().warn("🚨 OBSTACLE → STOP")
         else:
             k = 0.005
-            cmd.twist.linear.x = 0.2
-            cmd.twist.angular.z = -k * self.error
+            cmd.linear.x = 0.2
+            cmd.angular.z = -k * self.error
 
             self.get_logger().info(f"Following line | error: {self.error}")
 
