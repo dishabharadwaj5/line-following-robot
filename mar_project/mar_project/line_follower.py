@@ -37,8 +37,9 @@ class LineFollower(Node):
             h, w, _ = frame.shape
 
             # --- Use bottom 40% of frame as ROI (closer to ground) ---
-            roi = frame[int(h * 0.6):h, :]
-
+            # --- UPGRADE: Use bottom 60% of frame as ROI ---
+            # Looking further ahead helps the robot "jump" the gaps in a dashed line!
+            roi = frame[int(h * 0.4):h, :]
             # --- Convert to HSV and mask for BLACK line ---
             hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
             # Black = low value regardless of hue/saturation
