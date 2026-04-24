@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
 Control Node — the robot's brain
-- Subscribes to /line_error, /line_lost, /obstacle_detected
-- Uses a PD controller (not just P) for smoother steering
-- If line is lost: spins slowly to search for it
-- If obstacle: full stop
-- Publishes geometry_msgs/Twist to /cmd_vel  (plain Twist, correct for TurtleBot3)
+- Uses FULL PID for smooth line following
+- Uses a 4-Stage Geometric State Machine for Obstacle Evasion
 """
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32, Bool
 from geometry_msgs.msg import Twist
-
+import time
 
 # ── Tuning parameters ──────────────────────────────────────────────────────────
-LINEAR_SPEED   = 0.18    # m/s forward speed
-KP             = 0.004   # proportional gain  (was 0.005 — same ballpark)
-KD             = 0.002   # derivative gain    (new — reduces oscillation)
-SEARCH_SPEED   = 0.3     # rad/s spin when line is lost
+BASE_SPEED     = 0.20    
+MIN_SPEED      = 0.05    
+KP             = 0.008   
+KI             = 0.001   
+KD             = 0.004   
+SEARCH_SPEED   = 0.6     
 # ───────────────────────────────────────────────────────────────────────────────
-
 
 class ControlNode(Node):
     def __init__(self):
@@ -34,12 +32,16 @@ class ControlNode(Node):
 
         self.error    = 0.0
         self.prev_err = 0.0
+        self.sum_error = 0.0
         self.obstacle = False
         self.line_lost = False
 
-        self.timer = self.create_timer(0.1, self.control_loop)   # 10 Hz
+        # --- THE NEW STATE MACHINE VARIABLES ---
+        self.evasion_state = 0
+        self.state_end_time = 0.0
 
-        self.get_logger().info("✅ Control Node started")
+        self.timer = self.create_timer(0.1, self.control_loop)   # 10 Hz
+        self.get_logger().info("✅ Control Node with State Machine started")
 
     # ── Callbacks ──────────────────────────────────────────────────────────────
     def line_cb(self, msg):
@@ -51,34 +53,86 @@ class ControlNode(Node):
     def lost_cb(self, msg):
         self.line_lost = msg.data
 
-    # ── Main control loop ──────────────────────────────────────────────────────
+   # ── Main control loop ──────────────────────────────────────────────────────
     def control_loop(self):
         cmd = Twist()
+        now = time.time()
 
-        if self.obstacle:
-            # PRIORITY 1: obstacle — full stop
-            cmd.linear.x  = 0.0
-            cmd.angular.z = 0.0
-            self.get_logger().warn("🚨 OBSTACLE → STOP")
+        # TRIGGER THE BYPASS SEQUENCE IF AN OBSTACLE IS SEEN
+        if self.obstacle and self.evasion_state == 0:
+            self.evasion_state = 1
+            self.state_end_time = now + 0.8  # Turn right for 0.8 seconds
+            self.get_logger().warn("🚨 OBSTACLE! Starting Geometric Bypass...")
 
+        # ── THE OBSTACLE BYPASS STATE MACHINE ──
+        if self.evasion_state == 1:
+            # STAGE 1: Pivot Right 
+            if now < self.state_end_time:
+                cmd.linear.x = 0.0
+                cmd.angular.z = -0.8
+                self.get_logger().info("↪️ Evasion Phase 1: Pivoting Right")
+            else:
+                self.evasion_state = 2
+                self.state_end_time = now + 1.5  # Drive straight for 1.5 seconds
+
+        elif self.evasion_state == 2:
+            # STAGE 2: Drive forward past the box
+            if now < self.state_end_time:
+                cmd.linear.x = 0.15
+                cmd.angular.z = 0.0
+                self.get_logger().info("⬆️ Evasion Phase 2: Driving Forward")
+            else:
+                self.evasion_state = 3
+                self.state_end_time = now + 0.8  # Turn left for 0.8 seconds
+
+        elif self.evasion_state == 3:
+            # STAGE 3: Pivot Left to face the track again
+            if now < self.state_end_time:
+                cmd.linear.x = 0.0
+                cmd.angular.z = 0.8
+                self.get_logger().info("↩️ Evasion Phase 3: Pivoting Left")
+            else:
+                self.evasion_state = 4
+                self.get_logger().info("🔎 Evasion Phase 4: Sweeping for Line...")
+
+        elif self.evasion_state == 4:
+            # STAGE 4: Sweep until line is found
+            if self.line_lost:
+                cmd.linear.x = 0.12
+                # Drive forward with a slight left curl to guarantee hitting the line
+                cmd.angular.z = 0.25 
+            else:
+                # LINE FOUND! Exit the state machine and return to normal driving
+                self.evasion_state = 0
+                self.sum_error = 0.0
+                self.get_logger().info("✅ Line Acquired! Resuming PID.")
+
+        # ── NORMAL DRIVING BEHAVIOR ──
         elif self.line_lost:
-            # PRIORITY 2: lost line — spin slowly in last-error direction
+            # Normal Search Mode if it accidentally loses the line with no obstacle
+            self.sum_error = 0.0
             cmd.linear.x  = 0.0
             cmd.angular.z = SEARCH_SPEED if self.error >= 0 else -SEARCH_SPEED
             self.get_logger().warn("🔍 Line lost → searching…")
 
         else:
-            # PRIORITY 3: normal line following with PD controller
+            # Normal Line Following with FULL PID
+            self.sum_error += self.error
+            self.sum_error = max(min(self.sum_error, 250.0), -250.0)
             derivative     = self.error - self.prev_err
-            angular        = -(KP * self.error + KD * derivative)
-            cmd.linear.x   = LINEAR_SPEED
-            cmd.angular.z  = angular
+            
+            angular        = -(KP * self.error + KI * self.sum_error + KD * derivative)
+            
+            speed_penalty = 0.001 * abs(self.error)
+            current_speed = max(MIN_SPEED, BASE_SPEED - speed_penalty)
+
+            cmd.linear.x   = float(current_speed)
+            cmd.angular.z  = float(angular)
             self.get_logger().info(
-                f"📍 Following | err={self.error:.1f} | ω={angular:.3f}")
+                f"📍 PID | err={self.error:.1f} | vel={current_speed:.2f} | ω={angular:.3f}")
 
         self.prev_err = self.error
         self.cmd_pub.publish(cmd)
-
 
 def main(args=None):
     rclpy.init(args=args)
@@ -88,7 +142,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
