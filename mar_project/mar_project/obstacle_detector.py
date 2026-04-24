@@ -32,7 +32,7 @@ class ObstacleDetector(Node):
         self.obstacle_active = False
         self.clear_count = 0
 
-        self.get_logger().info("✅ Obstacle Detector Node started")
+        self.get_logger().info(" Obstacle Detector Node started")
 
     def scan_callback(self, msg: LaserScan):
         ranges = msg.ranges
